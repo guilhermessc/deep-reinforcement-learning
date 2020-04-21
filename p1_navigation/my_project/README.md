@@ -13,3 +13,17 @@ The **observation space** has 37 dimensions and contains the agent's velocity, a
 
 The task is episodic and it is considered solved once the agent reaches an average score of `13+` over 100 consecutive episodes.
 
+
+# Getting Started
+
+1. To use the environment follow the instructions on the [Getting Started](https://github.com/guilhermessc/deep-reinforcement-learning/blob/master/p1_navigation/README.md "Parent directory README") section of the parent directory and copy the files here.
+
+[//]: # (TODO: Improve this set up)
+2. Rename the executable environment file as _Banana.x86_64_.
+
+3. Install the dependencies on `deep-reinforcement-learning/python/` using the following command:
+
+``bash
+$ pip3 install .
+``
+
