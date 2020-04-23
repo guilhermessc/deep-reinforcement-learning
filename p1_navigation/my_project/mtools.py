@@ -189,12 +189,12 @@ def plot_score(score, filename=None, title='Agent Score'):
 
 def save_agent(agent, filename='agent.bin'):
 
-	filehandler = open(filename, 'w')
+	filehandler = open(filename, 'wb')
 	pickle.dump(agent, filehandler)
 
 
 def load_agent(filename='agent.bin'):
 
-	filehandler = open(filename, 'r')
+	filehandler = open(filename, 'rb')
 	agent = pickle.load(filehandler)
 	return agent
