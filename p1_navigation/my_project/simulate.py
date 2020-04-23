@@ -1,52 +1,24 @@
 #! /bin/python3
 
-from unityagents import UnityEnvironment
 import numpy as np
 from agent import *
+from mtools import *
 
-env = UnityEnvironment(file_name="./Banana.x86_64")
 
-# get the default brain
-brain_name = env.brain_names[0]
-brain = env.brains[brain_name]
+# Create the environment
+env, brain_name, action_size, state_size = create_env()
 
-# reset the environment
-env_info = env.reset(train_mode=True)[brain_name]
+# Create the agent
+agent = DeepQAgent(action_size, state_size)
 
-# number of agents in the environment
-print('Number of agents:', len(env_info.agents))
+# Simulate the agent
+scores = simulate(env=env, brain_name=brain_name, agent=agent, n_episodes=10000, verbose=1)
 
-# number of actions
-action_size = brain.vector_action_space_size
-print('Number of actions:', action_size)
+# Plot the results
+plot_score(scores, filename='agent_score.png', title='Agent Score')
 
-# examine the state space 
-state = env_info.vector_observations[0]
-print('States look like:', state)
-state_size = len(state)
-print('States have length:', state_size)
+# Save the agent
+save_agent(agent, filename='agent.bin')
 
-env_info = env.reset(train_mode=False)[brain_name] # reset the environment
-state = env_info.vector_observations[0]            # get the current state
-score = 0                                          # initialize the score
-done = False
-agent = RandomAgent(action_size, state_size)
-
-while not done:
-	
-	action = agent.act(state)					   # select an action
-	
-	env_info = env.step(action)[brain_name]        # send the action to the environment
-	next_state = env_info.vector_observations[0]   # get the next state
-	reward = env_info.rewards[0]                   # get the reward
-	done = env_info.local_done[0]                  # see if episode has finished
-	
-	agent.learn(state, next_state, action, reward, done) # train the agent (if trainable)
-
-	score += reward                                # update the score
-	state = next_state                             # roll over the state to next time step
-    
-print("Score: {}".format(score))
-
+# Close the environment
 env.close()
-
