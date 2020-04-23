@@ -5,6 +5,9 @@ from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
 
+from unityagents import UnityEnvironment
+
+
 
 class ReplayBuffer:
 	'''Fixed-size buffer to store experience tuples.'''
@@ -95,3 +98,26 @@ class QNN:
 
 		self.model.train_on_batch(x, y_real)
 
+
+
+def create_env(verbose=0):
+	env = UnityEnvironment(file_name="./Banana.x86_64")
+
+	# get the default brain
+	brain_name = env.brain_names[0]
+	brain = env.brains[brain_name]
+
+	# number of actions
+	action_size = brain.vector_action_space_size
+
+	# examine the state space
+	env_info = env.reset(train_mode=True)[brain_name]
+	state = env_info.vector_observations[0]
+	state_size = len(state)
+
+	if verbose > 0:
+		print('Number of actions:', action_size)
+		print('States look like:', state)
+		print('States have length:', state_size)
+
+	return (env, brain_name, action_size, state_size)
