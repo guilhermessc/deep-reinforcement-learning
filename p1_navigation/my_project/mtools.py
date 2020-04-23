@@ -7,6 +7,8 @@ from keras.optimizers import Adam
 
 from unityagents import UnityEnvironment
 
+import matplotlib.pyplot as plt
+
 
 
 class ReplayBuffer:
@@ -154,10 +156,29 @@ def simulate(env, brain_name, agent, n_episodes=10000):
 	return scores
 
 
+def plot_score(score, filename=None, title='Agent Score'):
+
+	# Compute the rolling average
+	rolling_avg = np.zeros(len(score))
+	for i in range(99, len(score)):
+		rolling_avg[i] = np.mean(score[i-99:i+1])
+
+	# Create a 16x9 figure
+	fig, ax = plt.subplots(figsize=(16,9))
+
+	# Plot both curves over the same axis
+	ax.plot(range(len(score)), score, label='Score', color='blue', alpha=0.75)
+	ax.plot(range(len(rolling_avg)), rolling_avg, label='Rolling average', color='red')
 
 
+	ax.set_title(title)
+	ax.legend()
 
 
+	if filename is not None:
+		fig.savefig(filename)
+	else:
+		fig.show()
 
-
-
+	# return the maximum avg score over 100 consecutives episodes
+	return max(rolling_avg)
