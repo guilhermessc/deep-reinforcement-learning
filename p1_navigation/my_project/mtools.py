@@ -9,6 +9,8 @@ from unityagents import UnityEnvironment
 
 import matplotlib.pyplot as plt
 
+import pickle
+
 
 
 class ReplayBuffer:
@@ -182,3 +184,9 @@ def plot_score(score, filename=None, title='Agent Score'):
 
 	# return the maximum avg score over 100 consecutives episodes
 	return max(rolling_avg)
+
+
+def save_agent(agent, filename='agent.bin'):
+
+	filehandler = open(filename, 'w')
+	pickle.dump(agent, filehandler)
