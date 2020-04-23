@@ -128,12 +128,12 @@ def create_env(verbose=0):
 
 
 
-def simulate(env, brain_name, agent, n_episodes=10000):
+def simulate(env, brain_name, agent, n_episodes=10000, verbose=0, train_mode=True):
 
 	scores = []
 	for episode in range(n_episodes):
 
-		env_info = env.reset(train_mode=True)[brain_name]  # reset the environment
+		env_info = env.reset(train_mode=train_mode)[brain_name]  # reset the environment
 		state = env_info.vector_observations[0]            # get the current state
 		done = False
 		score = 0                                          # initialize the score
@@ -150,8 +150,9 @@ def simulate(env, brain_name, agent, n_episodes=10000):
 
 			score += reward                                # update the score
 			state = next_state                             # roll over the state to next time step
-		    
-		print("{}: \tScore: {}".format(episode, score))
+
+		if verbose > 0:
+			print("{}: \tScore: {}".format(episode, score))
 
 		scores.append(score)
 
