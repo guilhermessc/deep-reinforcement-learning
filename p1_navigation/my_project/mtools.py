@@ -3,6 +3,7 @@ import numpy as np
 # TODO: Update requirements for deploy
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
+from keras.optimizers import Adam
 
 
 class ReplayBuffer:
@@ -37,23 +38,18 @@ class ReplayBuffer:
 			return []
 
 		# randomly sample the memory
-		probas = [experience[5] for experience in self.memory]
-		probas/=sum(probas)
+		probas = np.array([float(experience[5]) for experience in self.memory])
+		probas /= sum(probas)
 		sample = np.random.choice(mlen, k, p=probas)
-		samples = self.memory[sample]
+		# sample the experiences without the error weight
+		samples = [self.memory[s][:-1] for s in sample]
 
-		states      = [s[0] for s in samples]
-		actions     = [s[1] for s in samples]
-		rewards     = [s[2] for s in samples]
-		next_states = [s[3] for s in samples]
-		dones       = [s[4] for s in samples]
-
-		return (states, actions, rewards, next_states, dones)
+		return samples
 
 
 class QNN:
 
-	def __init__(self, input_size, output_size, hidden_layers=[15, 8], activation=['relu', 'relu', 'linear']):
+	def __init__(self, input_size, output_size, hidden_layers=[64, 64], activation=['relu', 'relu', 'linear'], lr=0.0005):
 
 		# Create the neural network model
 		model = Sequential()
@@ -67,7 +63,8 @@ class QNN:
 			model.add(Dropout(0.1)) # Add dropout in between layers
 			model.add(Dense(layer, activation=activ))
 
-		model.compile(loss='mean_absolute_error', optimizer='rmsprop', metrics=['accuracy'])
+		adam = Adam(lr=lr)
+		model.compile(loss='mean_absolute_error', optimizer=adam, metrics=['accuracy'])
 
 		self.model = model
 
@@ -76,8 +73,9 @@ class QNN:
 		
 		# Transform x to Keras input format
 		if len(np.shape(x)) == 1:
-			x = np.array([x])
-	
+			x = [x]
+		x = np.array(x)
+
 		y = self.model.predict(x)
 
 		if len(y) == 1:
@@ -88,10 +86,12 @@ class QNN:
 		
 		# Compute desired Y-update value
 		y_pred = self.get(x)
-		y_real += np.array(loss)
+		y_real = y_pred + np.array(loss)
 
-		# Train on the batch many times to have a significant impact on the gradient
-		# TODO: refactor this
-		for i in range(100):
-			self.model.train_on_batch(x, y_real)
+		# Transform x to Keras input format
+		if len(np.shape(x)) == 1:
+			x = [x]
+		x = np.array(x)
+
+		self.model.train_on_batch(x, y_real)
 
