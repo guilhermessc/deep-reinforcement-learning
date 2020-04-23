@@ -190,3 +190,10 @@ def save_agent(agent, filename='agent.bin'):
 
 	filehandler = open(filename, 'w')
 	pickle.dump(agent, filehandler)
+
+
+def load_agent(filename='agent.bin'):
+
+	filehandler = open(filename, 'r')
+	agent = pickle.load(filehandler)
+	return agent
