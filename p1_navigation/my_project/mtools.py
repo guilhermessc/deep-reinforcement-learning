@@ -121,3 +121,43 @@ def create_env(verbose=0):
 		print('States have length:', state_size)
 
 	return (env, brain_name, action_size, state_size)
+
+
+
+def simulate(env, brain_name, agent, n_episodes=10000):
+
+	scores = []
+	for episode in range(n_episodes):
+
+		env_info = env.reset(train_mode=True)[brain_name]  # reset the environment
+		state = env_info.vector_observations[0]            # get the current state
+		done = False
+		score = 0                                          # initialize the score
+		while not done:
+			
+			action = agent.act(state)					   # select an action
+			
+			env_info = env.step(action)[brain_name]        # send the action to the environment
+			next_state = env_info.vector_observations[0]   # get the next state
+			reward = env_info.rewards[0]                   # get the reward
+			done = env_info.local_done[0]                  # see if episode has finished
+			
+			agent.learn(state, next_state, action, reward, done) # train the agent (if trainable)
+
+			score += reward                                # update the score
+			state = next_state                             # roll over the state to next time step
+		    
+		print("{}: \tScore: {}".format(episode, score))
+
+		scores.append(score)
+
+	return scores
+
+
+
+
+
+
+
+
+
