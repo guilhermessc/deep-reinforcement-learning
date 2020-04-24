@@ -9,7 +9,7 @@ from mtools import *
 env, brain_name, action_size, state_size = create_env()
 
 # Create the agent
-agent = DeepQAgent(action_size, state_size)
+agent = DQNAgent(action_size, state_size)
 
 # Simulate the agent
 scores = simulate(env=env, brain_name=brain_name, agent=agent, n_episodes=10000, verbose=1)
