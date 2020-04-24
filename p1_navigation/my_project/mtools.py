@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 
 import pickle
 
+from copy import deepcopy
+
 
 
 class ReplayBuffer:
@@ -77,7 +79,7 @@ class QNN:
 
 	def get(self, x):
 		''' Return the Q-Value for each action from a given state x '''
-		
+
 		# Transform x to Keras input format
 		if len(np.shape(x)) == 1:
 			x = [x]
@@ -86,11 +88,11 @@ class QNN:
 		y = self.model.predict(x)
 
 		if len(y) == 1:
-			return y[0] # return one item for a simple prediction 
+			return y[0] # return one item for a simple prediction
 		return y # return a batch for batch prediction
 
 	def update(self, x, loss):
-		
+
 		# Compute desired Y-update value
 		y_pred = self.get(x)
 		y_real = y_pred + np.array(loss)
@@ -102,6 +104,72 @@ class QNN:
 
 		self.model.train_on_batch(x, y_real)
 
+
+class DQN:
+
+	def __init__(self, input_size, output_size, hidden_layers=[64, 64], activation=['relu', 'relu', 'linear'], lr=0.0005, tau=0.25):
+
+		# Create the neural network model
+		model = Sequential()
+		layers = np.concatenate([hidden_layers, [output_size]])
+
+		# Create input layer
+		model.add(Dense(hidden_layers[0], input_dim=input_size, activation=activation[0]))
+
+		# Stack the layers after the first
+		for layer, activ in zip(layers[1:], activation[1:]):
+			model.add(Dense(layer, activation=activ))
+
+		adam = Adam(lr=lr)
+		model.compile(loss='mean_absolute_error', optimizer=adam, metrics=['accuracy'])
+
+		self.model = model
+		self.model_minus = deepcopy(model)
+		self.tau = tau
+
+	def get(self, x):
+		''' Return the Q-Value for each action from a given state x '''
+
+		# Transform x to Keras input format
+		if len(np.shape(x)) == 1:
+			x = [x]
+		x = np.array(x)
+
+		y = self.model.predict(x)
+		y_minus = self.model_minus.predict(x)
+
+		if len(y) == 1:
+			return (y[0], y_minus[0]) # return one item for a simple prediction
+		return (y, y_minus) # return a batch for batch prediction
+
+	def update(self, x, loss):
+
+		# Compute desired Y-update value
+		y_pred = self.get(x)[0]
+
+		# "Real" value is based on the Q-fixed target so it doesn't change itself at every update
+		# y_real is Q(S', argmax_a(Q(S',a,w)), w'): the decision taken by the main model evaluated by the old one
+		y_real = y_pred + np.array(loss)
+
+		# Transform x to Keras input format
+		if len(np.shape(x)) == 1:
+			x = [x]
+		x = np.array(x)
+
+		self.model.train_on_batch(x, y_real)
+		self.interpolate_models()
+
+	def interpolate_models(self):
+		''' Interpolates the weights in both models for a soft update '''
+		# Recover each model weights
+		weight = np.array(self.model.get_weights())
+		weight_minus = np.array(self.model_minus.get_weights())
+
+		# Compute the interpolated weights by a rate of self.tau
+		interpolated_weight = (1-self.tau)*weight_minus + self.tau*weight
+
+		# Update model_minus
+		self.model_minus.set_weights(interpolated_weight)
 
 
 def create_env(verbose=0):
