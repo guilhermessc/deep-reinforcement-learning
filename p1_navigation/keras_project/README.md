@@ -1,3 +1,7 @@
+# Important note
+
+This directory contains the implementation of the Q-learning algorithm using Keras instead of pytorch and therefore is not the solution for the Nanodegree project.
+
 # Project Details
 
 This project implements an agent based on a **`Deep Q-Learning algorithm`**. The agent's goal is to navigate in a box and collect yellow bananas while avoiding blue bananas.
