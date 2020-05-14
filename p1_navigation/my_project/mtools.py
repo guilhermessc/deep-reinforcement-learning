@@ -4,6 +4,9 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
+from keras.initializers import TruncatedNormal, RandomUniform
+from keras import regularizers
+
 
 from unityagents import UnityEnvironment
 
@@ -14,6 +17,9 @@ import pickle
 from copy import deepcopy
 
 
+SEED = 123
+STDDEV = 0.1
+L2 = 0.000000001
 
 class ReplayBuffer:
 	'''Fixed-size buffer to store experience tuples.'''
@@ -22,6 +28,7 @@ class ReplayBuffer:
 		self.memory = []
 		self.buffer_size = buffer_size
 		self.batch_size = batch_size
+		self.index=0
 
 
 	def add(self, state, action, reward, next_state, done, error=1):
@@ -29,12 +36,11 @@ class ReplayBuffer:
 
 		# Append the experience
 		experience = (state, action, reward, next_state, done, error)
-		self.memory.append(experience)
-
-		# Trim the memory with respect to the size
-		if len(self.memory) > self.buffer_size:
-			self.memory = self.memory[-self.buffer_size:]
-
+		if len(self.memory) < self.buffer_size:
+			self.memory.append(experience)
+		else:
+			self.memory[self.index] = experience
+			self.index = (self.index + 1) % self.buffer_size
 
 	def sample(self, k=None):
 		'''Randomly sample a batch of experiences from memory.'''
@@ -43,7 +49,7 @@ class ReplayBuffer:
 
 		# check for empty buffer
 		mlen = len(self.memory)
-		if mlen == 0:
+		if mlen < k:
 			return []
 
 		# randomly sample the memory
@@ -110,25 +116,36 @@ class DQN:
 	def __init__(self, input_size, output_size, hidden_layers=[64, 64], activation=['relu', 'relu', 'linear'], lr=0.0005, tau=0.25):
 
 		# Create the neural network model
-		model = Sequential()
-		layers = np.concatenate([hidden_layers, [output_size]])
+		def create_model(input_size, output_size, hidden_layers, activation, lr):
+			model = Sequential()
+			layers = np.concatenate([hidden_layers, [output_size]])
 
-		# Create input layer
-		model.add(Dense(hidden_layers[0], input_dim=input_size, activation=activation[0]))
+			# Initializer
+			ki = RandomUniform(minval=-STDDEV, maxval=STDDEV, seed=SEED)
 
-		# Stack the layers after the first
-		for layer, activ in zip(layers[1:], activation[1:]):
-			model.add(Dense(layer, activation=activ))
+			# Regularizer - the L2 penalizes large weight values, this should reducing overestimating
+			kr = regularizers.l2(L2)
 
-		adam = Adam(lr=lr)
-		model.compile(loss='mean_absolute_error', optimizer=adam, metrics=['accuracy'])
+			# Create input layer
+			model.add(Dense(hidden_layers[0], input_dim=input_size, activation=activation[0], kernel_regularizer=kr, kernel_initializer=ki))
 
-		self.model = model
-		self.model_minus = deepcopy(model)
+			# Stack the layers after the first
+			for layer, activ in zip(layers[1:], activation[1:]):
+				model.add(Dense(layer, activation=activ, kernel_regularizer=kr, kernel_initializer=ki))
+
+			adam = Adam(lr=lr)
+			model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])
+
+			return model
+
+		self.model = create_model(input_size=input_size, output_size=output_size, hidden_layers=hidden_layers, activation=activation, lr=lr)
+		self.model_minus = create_model(input_size=input_size, output_size=output_size, hidden_layers=hidden_layers, activation=activation, lr=lr)
 		self.tau = tau
 
 	def get(self, x):
 		''' Return the Q-Value for each action from a given state x '''
+		if x == []:
+			return []
 
 		# Transform x to Keras input format
 		if len(np.shape(x)) == 1:
@@ -144,6 +161,9 @@ class DQN:
 
 	def update(self, x, loss):
 
+		if x == []:
+			return
+
 		# Compute desired Y-update value
 		y_pred = self.get(x)[0]
 
@@ -156,7 +176,9 @@ class DQN:
 			x = [x]
 		x = np.array(x)
 
+		# Train on the sampled experience
 		self.model.train_on_batch(x, y_real)
+
 		self.interpolate_models()
 
 	def interpolate_models(self):
@@ -195,34 +217,78 @@ def create_env(verbose=0):
 	return (env, brain_name, action_size, state_size)
 
 
-
-def simulate(env, brain_name, agent, n_episodes=10000, verbose=0, train_mode=True):
+def simulate(env, brain_name, agent, n_episodes=10000, verbose=0, train_mode=True, dbug=True, filename='agent.bin'):
 
 	scores = []
 	for episode in range(n_episodes):
+		try:
 
-		env_info = env.reset(train_mode=train_mode)[brain_name]  # reset the environment
-		state = env_info.vector_observations[0]            # get the current state
-		done = False
-		score = 0                                          # initialize the score
-		while not done:
-			
-			action = agent.act(state)					   # select an action
-			
-			env_info = env.step(action)[brain_name]        # send the action to the environment
-			next_state = env_info.vector_observations[0]   # get the next state
-			reward = env_info.rewards[0]                   # get the reward
-			done = env_info.local_done[0]                  # see if episode has finished
-			
-			agent.learn(state, next_state, action, reward, done) # train the agent (if trainable)
+			env_info = env.reset(train_mode=train_mode)[brain_name]  # reset the environment
+			state = env_info.vector_observations[0]            # get the current state
+			done = False
+			score = 0                                          # initialize the score
+			actions = np.zeros(agent.nA)
+			avg_q = []
+			avg_q_minus = []
+			td_errors = []
+			td_errors_reward = [0]
+			td_errors_done = [0]
+			# 300 iterations
+			while not done:
+				action = agent.act(state)					   # select an action
+				actions[action] += 1
 
-			score += reward                                # update the score
-			state = next_state                             # roll over the state to next time step
+				env_info = env.step(action)[brain_name]        # send the action to the environment
+				next_state = env_info.vector_observations[0]   # get the next state
+				# Normalizing input
+				next_state[-1]/=10
+				next_state[-2]/=4
 
-		if verbose > 0:
-			print("{}: \tScore: {}".format(episode, score))
+                                reward = env_info.rewards[0]                   # get the reward
+				done = env_info.local_done[0]                  # see if episode has finished
 
-		scores.append(score)
+				td_error = agent.learn(state, next_state, action, reward, done) # train the agent (if trainable)
+
+				score += reward                                # update the score
+				state = next_state                             # roll over the state to next time step
+
+				avg_q.append(agent.Q.get(state)[0])
+				avg_q_minus.append(agent.Q.get(state)[1])
+				td_errors.append(td_error)
+				if reward != 0:
+					td_errors_reward.append(td_error)
+				if done:
+					td_errors_done.append(td_error)
+
+			if verbose > 0:
+				print("{}: \tScore: {}".format(episode, score))
+			scores.append(score)
+
+			if verbose > 0 and len(scores) > 100:
+				print("\t Avg Score: {}".format(np.mean(scores[-100:])))
+
+			if verbose > 1:
+				print("\t Actions: {}".format(actions))
+
+			if verbose > 2:
+				print("\t Epsilon at: {}".format(np.around(agent.eps, decimals=3)))
+
+			if verbose > 2:
+				print("\t Q_value: {:.2f} | {:.2f} | {:.2f}".format(np.min(avg_q),np.mean(avg_q),np.max(avg_q)))
+				print("\t Q_minus: {:.2f} | {:.2f} | {:.2f}".format(np.min(avg_q_minus),np.mean(avg_q_minus),np.max(avg_q_minus)))
+				print("\t TDError: {:.2f} | {:.2f} | {:.2f}".format(np.min(td_errors),np.mean(td_errors),np.max(td_errors)))
+				print("\t TDErr_r: {:.2f} | {:.2f} | {:.2f}".format(np.min(td_errors_reward),np.mean(td_errors_reward),np.max(td_errors_reward)))
+				print("\t TDErr_d: {:.2f} | {:.2f} | {:.2f}".format(np.min(td_errors_done),np.mean(td_errors_done),np.max(td_errors_done)))
+
+			if np.mean(scores[-100:]) >= 13:
+				print('\n\n######### WIN #########\n\n')
+				break
+
+			if episode % 100:
+				save_agent(agent, filename=filename)
+
+		except KeyboardInterrupt:
+			mdebug(agent, scores)
 
 	return scores
 
@@ -254,15 +320,23 @@ def plot_score(score, filename=None, title='Agent Score'):
 	# return the maximum avg score over 100 consecutives episodes
 	return max(rolling_avg)
 
-
 def save_agent(agent, filename='agent.bin'):
 
 	filehandler = open(filename, 'wb')
 	pickle.dump(agent, filehandler)
-
 
 def load_agent(filename='agent.bin'):
 
 	filehandler = open(filename, 'rb')
 	agent = pickle.load(filehandler)
 	return agent
+
+def mdebug(agent, scores):
+	mem = agent.memory.memory
+	m = [i[0] for i in mem]
+	q = agent.Q.get(m)[0]
+	w = agent.Q.model.get_weights()
+
+	print("memory = mem | states = m | pred_q = q | weights = w")
+
+	breakpoint()
